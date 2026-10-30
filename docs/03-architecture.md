@@ -3,8 +3,9 @@
 | 項目 | 内容 |
 |---|---|
 | 文書番号 | AAC-ARC-001 |
-| 版 | 第0.1版（ドラフト） |
-| 作成日 | 2026-10-30 |
+| 版 | 第0.2版 |
+| 更新日 | 2026-10-30 |
+| 変更点 | 射程帯・マップ外ボックス・d4 判定に合わせてデータ型と描画方式を更新 |
 
 ---
 
@@ -40,7 +41,9 @@
 
 - 状態は1つのオブジェクト `GameState`。変更は `applyAction(state, action)` で新しい状態を返す。
 - ターンの解決は `resolveTurn(state, blueOrders, redOrders)` が担い、`{ state, events }` を返す。`events` は UI のアニメとログに使う。
-- 乱数は xoshiro128** などのシード付き生成器。状態に乱数の内部値を持たせ、セーブ／ロード後も同じ結果を再現する。
+- 乱数は xoshiro128** などのシード付き生成器。状態に乱数の内部値を持たせ、セーブ／ロード後も同じ結果を再現する。d4 は `1 + (next() % 4)` ではなく偏りのない方法（棄却法）で引く。
+- 射程帯は `map.json` の `bands` 表を引く。表は経緯度から大圏距離を計算して生成する（生成スクリプトを `tools/` に置く）。地図上のエリアとマップ外ボックスを同じ ID 体系で扱うため、射程計算は 1 つの関数で済む。
+- d4 の命中数の分布は二項分布で正確に求まる。UI の確率表示と CPU の期待値計算は同じ関数 `hitDistribution(dice, target)` を使う。
 - UI と AI は同じエンジン関数を呼ぶ。AI は状態をコピーして試行（先読み）する。
 
 ### 3.1 主なデータ型（TypeScript）
@@ -58,6 +61,7 @@ interface GameState {
   escalation: 0 | 1 | 2 | 3 | 4 | 5;
   sides: Record<Side, SideState>;
   areas: Record<AreaId, AreaState>;
+  boxes: Record<BoxId, OffMapBox>;
   units: Record<UnitId, Unit>;
   log: GameEvent[];
 }
@@ -70,6 +74,8 @@ interface SideState {
   lrmSalvos: number;     // 長射程ミサイルの残り斉射数
 }
 
+type LocationId = AreaId | BoxId;   // 地図上のエリアとマップ外ボックスを同じ扱いにする
+
 interface AreaState {
   id: AreaId;
   owner: Side | 'neutral' | null;
@@ -78,21 +84,44 @@ interface AreaState {
   airSuperiority: Side | null;
 }
 
+interface OffMapBox {
+  id: BoxId;                // 'B-REAR' | 'B-HOME' | 'B-STO' | 'R-REAR' | 'R-STO'
+  side: Side;
+  role: 'rear' | 'standoff';
+  salvosLeft?: number;      // スタンドオフ・ボックスの残り弾数
+}
+
+interface UnitType {
+  code: 'FTR' | 'MRF' | 'STL' | 'BMR' | 'TKR' | 'AEW' | 'ISR' | 'ALT' | 'SAM' | 'LRM';
+  aaDice: number;           // 対空ダイス数（d4）
+  agDice: number;           // 対地ダイス数（d4）
+  target: 2 | 3 | 4;        // 命中基準（出目がこれ以上で命中）
+  steps: 1 | 2;
+  radius: number;           // 行動半径（射程帯）
+}
+
 interface Unit {
   id: UnitId;
   side: Side;
-  type: 'FTR' | 'MRF' | 'STL' | 'BMR' | 'TKR' | 'AEW' | 'ISR' | 'ALT' | 'SAM' | 'LRM';
-  steps: number;          // 残りステップ
-  location: AreaId;
+  type: UnitType['code'];
+  steps: number;            // 残りステップ
+  location: LocationId;
   posture: 'parked' | 'dispersed';
+  transit?: LocationId;     // 転地中なら行き先（1 ターン後に到着）
 }
 
 interface Order {           // 計画フェイズの任務割当
   unitIds: UnitId[];        // パッケージ
   mission: 'CAP' | 'STRIKE' | 'SEAD' | 'RECON' | 'TANKER' | 'AIRLIFT';
-  target: AreaId;
+  target: LocationId;
 }
 ```
+
+### 3.2 射程地図の描画
+
+- 地図は SVG。エリアは経緯度を簡易投影した座標に置く（`x = (経度 − 105) × 20 + 20`、`y = (35 − 緯度) × 20 + 20`）。
+- 射程リングは楕円で描く。縦半径は 1 帯あたり約 90、横半径はその地点の緯度の余弦で割って補正する。
+- マップ外ボックスは地図の端に固定表示し、選んだときだけ基準点に印を出してリングを描く。
 
 ## 4. ディレクトリ構成（案）
 
