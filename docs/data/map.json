@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "note": "x, y は試作用の画面座標（viewBox 0 0 860 560）。経緯度を簡易投影したもの。",
+  "areas": [
+    { "id": "KYU", "name": "九州",           "kind": "base",      "owner": "blue",    "base": "hub",   "x": 530, "y": 70 },
+    { "id": "AMA", "name": "奄美",           "kind": "base",      "owner": "blue",    "base": "spoke", "x": 510, "y": 154 },
+    { "id": "OKI", "name": "沖縄",           "kind": "base",      "owner": "blue",    "base": "hub",   "x": 476, "y": 192 },
+    { "id": "SAK", "name": "先島",           "kind": "base",      "owner": "blue",    "base": "spoke", "x": 410, "y": 230 },
+    { "id": "OGA", "name": "小笠原・硫黄島", "kind": "base",      "owner": "blue",    "base": "spoke", "x": 750, "y": 210 },
+    { "id": "GUA", "name": "グアム",         "kind": "base",      "owner": "blue",    "base": "hub",   "x": 816, "y": 450 },
+    { "id": "LUZ", "name": "ルソン北部",     "kind": "base",      "owner": "neutral", "base": "spoke", "x": 344, "y": 376 },
+    { "id": "ECC", "name": "華東沿岸",       "kind": "base",      "owner": "red",     "base": "hub",   "x": 340, "y": 130 },
+    { "id": "SCC", "name": "華南沿岸",       "kind": "base",      "owner": "red",     "base": "hub",   "x": 210, "y": 260 },
+    { "id": "HAI", "name": "海南島",         "kind": "base",      "owner": "red",     "base": "hub",   "x": 116, "y": 336 },
+    { "id": "SPR", "name": "南沙諸島",       "kind": "base",      "owner": "red",     "base": "spoke", "x": 210, "y": 520 },
+    { "id": "ECS", "name": "東シナ海",       "kind": "contested", "x": 430, "y": 110 },
+    { "id": "TWS", "name": "台湾海峡",       "kind": "contested", "x": 316, "y": 230 },
+    { "id": "TWE", "name": "台湾東方海域",   "kind": "contested", "x": 390, "y": 290 },
+    { "id": "BAS", "name": "バシー海峡",     "kind": "contested", "x": 330, "y": 320 },
+    { "id": "PHS", "name": "フィリピン海",   "kind": "contested", "x": 560, "y": 310 },
+    { "id": "SCN", "name": "南シナ海北部",   "kind": "contested", "x": 230, "y": 370 },
+    { "id": "SCS", "name": "南シナ海南部",   "kind": "contested", "x": 170, "y": 450 }
+  ],
+  "links": [
+    ["KYU", "AMA", 1], ["KYU", "ECS", 1], ["KYU", "OGA", 2],
+    ["AMA", "OKI", 1], ["AMA", "ECS", 1],
+    ["OKI", "SAK", 1], ["OKI", "ECS", 1], ["OKI", "PHS", 1],
+    ["SAK", "ECS", 1], ["SAK", "TWE", 1],
+    ["ECS", "ECC", 1], ["ECS", "TWS", 1],
+    ["ECC", "TWS", 1],
+    ["TWS", "SCC", 1], ["TWS", "BAS", 1],
+    ["SCC", "HAI", 1], ["SCC", "SCN", 1],
+    ["HAI", "SCN", 1],
+    ["SCN", "BAS", 1], ["SCN", "SCS", 1], ["SCN", "LUZ", 1],
+    ["SCS", "SPR", 1],
+    ["BAS", "LUZ", 1], ["BAS", "TWE", 1],
+    ["TWE", "PHS", 1],
+    ["LUZ", "PHS", 1],
+    ["PHS", "OGA", 2], ["PHS", "GUA", 3],
+    ["OGA", "GUA", 2]
+  ]
+}
