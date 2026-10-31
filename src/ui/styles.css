@@ -1,0 +1,152 @@
+/* Layout: 作戦画面は「上部の状況帯＋左の射程地図＋右の任務パネル」。狭い画面では地図の下にパネルを積む。 */
+:root {
+  --bg: #edf1f5; --surface: #f9fbfc; --ink: #15212e; --muted: #566576; --rule: #c8d2dc;
+  --blue: #1d5bbd; --red: #bf3a2f; --amber: #b87300; --neutral: #7d8894; --good: #2f7d4f;
+  --blue-soft: #dbe6f7; --red-soft: #f6e0dd; --amber-soft: #f6ead2;
+  --f-display: "Zen Kaku Gothic New", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+  --f-body: "BIZ UDPGothic", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e141b; --surface: #151e28; --ink: #e2e8ee; --muted: #93a1b0; --rule: #2a3745;
+  --blue: #7aa6ff; --red: #ff8170; --amber: #f0b445; --neutral: #8d98a4; --good: #6fcf97;
+  --blue-soft: #1a2a45; --red-soft: #3a1f1d; --amber-soft: #3a2d12; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0e141b; --surface: #151e28; --ink: #e2e8ee; --muted: #93a1b0; --rule: #2a3745;
+  --blue: #7aa6ff; --red: #ff8170; --amber: #f0b445; --neutral: #8d98a4; --good: #6fcf97;
+  --blue-soft: #1a2a45; --red-soft: #3a1f1d; --amber-soft: #3a2d12; color-scheme: dark }
+
+* { box-sizing: border-box }
+html, body { height: 100% }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 14px; line-height: 1.6 }
+#app { min-height: 100%; display: flex; flex-direction: column }
+@media (min-width: 760px) { #app { height: 100% } }
+h1, h2, h3 { font-family: var(--f-display); margin: 0; line-height: 1.35; text-wrap: balance }
+p { margin: 0 }
+button { font: inherit; color: inherit; cursor: pointer }
+button:focus-visible, .hit:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px }
+.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums }
+.label { font-family: var(--f-mono); font-size: 10.5px; letter-spacing: .1em; color: var(--muted); text-transform: uppercase }
+.muted { color: var(--muted) }
+.blue { color: var(--blue) } .red { color: var(--red) }
+.gutter { padding-left: max(14px, env(safe-area-inset-left, 0px)); padding-right: max(14px, env(safe-area-inset-right, 0px)) }
+
+/* ボタン */
+.btn { border: 1px solid var(--rule); background: var(--surface); padding: 8px 14px; min-height: 40px; border-radius: 2px }
+.btn:hover { border-color: var(--ink) }
+.btn.primary { background: var(--amber); border-color: var(--amber); color: #1b1203; font-weight: 700 }
+.btn.primary:disabled { opacity: .45; cursor: not-allowed }
+.btn.small { padding: 4px 9px; min-height: 32px; font-size: 12.5px }
+.btn[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink) }
+.btn.ghost { background: transparent }
+
+/* 状況帯 */
+.statusbar { position: sticky; top: 0; z-index: 5; background: var(--ink); color: var(--surface); display: flex; flex-wrap: wrap; align-items: center; gap: 4px 18px; padding-block: calc(6px + env(safe-area-inset-top, 0px)) 6px; font-size: 12.5px }
+.statusbar b { font-family: var(--f-mono); color: var(--amber); font-weight: 600 }
+.statusbar .title { font-family: var(--f-display); font-weight: 900; letter-spacing: .02em }
+.statusbar .who { padding: 2px 8px; font-weight: 700 }
+.statusbar .who.blue { background: var(--blue); color: #fff } .statusbar .who.red { background: var(--red); color: #fff }
+.esc { display: inline-flex; gap: 2px; vertical-align: middle }
+.esc i { width: 9px; height: 9px; border: 1px solid var(--surface); opacity: .5 }
+.esc i.on { background: var(--amber); border-color: var(--amber); opacity: 1 }
+.esc i.on.r5 { background: var(--red); border-color: var(--red) }
+
+/* 作戦画面 */
+.board { flex: 1; display: grid; grid-template-columns: 1fr; gap: 0; min-height: 0 }
+@media (min-width: 760px) { .board { grid-template-columns: minmax(0, 1fr) clamp(280px, 34vw, 380px); grid-template-rows: minmax(0, 1fr) } }
+.mapwrap { position: relative; min-width: 0; min-height: 0; background: var(--surface); border-right: 1px solid var(--rule); display: flex; align-items: center; justify-content: center; overflow: hidden }
+.mapwrap .zoom { position: absolute; top: 8px; left: 8px; z-index: 2; gap: 4px }
+.mapwrap .zoom .btn { min-width: 40px; background: var(--surface) }
+.mapwrap svg { touch-action: none; user-select: none; -webkit-user-select: none }
+.mapwrap svg { width: 100%; height: 100%; max-height: 100%; display: block; touch-action: manipulation }
+.panel { min-width: 0; overflow-y: auto; padding-block: 12px 32px; display: grid; gap: 14px; align-content: start }
+.card { background: var(--surface); border: 1px solid var(--rule); padding: 12px; display: grid; gap: 8px }
+.card.hint { border-left: 3px solid var(--amber) }
+.card h3 { font-size: 15px }
+.row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center }
+.between { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap }
+.err { color: var(--red); font-size: 12.5px }
+.warn { color: var(--amber); font-size: 12.5px }
+
+/* 部隊の行 */
+.units { display: grid; gap: 4px }
+.unit { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 6px 8px; border: 1px solid var(--rule); background: var(--bg); text-align: left; width: 100% }
+.unit.sel { border-color: var(--amber); box-shadow: inset 0 0 0 1px var(--amber) }
+.unit.enemy { opacity: .8; cursor: default }
+.unit .meta { font-size: 12px; color: var(--muted) }
+.badge { font-family: var(--f-mono); font-size: 11px; font-weight: 600; padding: 2px 5px; color: #fff; min-width: 38px; text-align: center }
+.badge.blue { background: var(--blue) } .badge.red { background: var(--red) }
+.pips { display: inline-flex; gap: 2px; vertical-align: middle }
+.pips i { width: 8px; height: 8px; background: currentColor } .pips i.x { background: transparent; border: 1px solid currentColor }
+.orderline { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; font-size: 13px; padding: 4px 0; border-bottom: 1px dashed var(--rule) }
+.orderline:last-child { border-bottom: 0 }
+
+/* 予測 */
+.forecast { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px }
+.forecast b { font-family: var(--f-mono); font-size: 16px }
+
+/* 地図 */
+.grid line { stroke: var(--rule); stroke-width: .6; opacity: .6 }
+.grid text { font-family: var(--f-mono); font-size: 9px; fill: var(--muted); opacity: .8 }
+.node text { font-family: var(--f-body); font-size: 12px; fill: var(--ink); pointer-events: none }
+.node .code { font-family: var(--f-mono); font-size: 9.5px; fill: var(--muted) }
+.hit { cursor: pointer }
+.ring { fill: none; stroke: var(--amber); stroke-width: 1.2; opacity: .7; pointer-events: none }
+.ring.lim { stroke-width: 2.2; opacity: 1 }
+.ringlbl { font-family: var(--f-mono); font-size: 10px; fill: var(--amber); pointer-events: none }
+.boxlbl { font-family: var(--f-mono); font-size: 9px; fill: var(--muted); letter-spacing: .06em; pointer-events: none }
+.boxname { font-family: var(--f-body); font-size: 11.5px; fill: var(--ink); pointer-events: none }
+.chipt { font-family: var(--f-mono); font-size: 10px; font-weight: 600; fill: #fff; pointer-events: none }
+.keylbl { font-family: var(--f-mono); font-size: 9px; fill: var(--amber); font-weight: 600; pointer-events: none }
+.target-halo { fill: none; stroke: var(--amber); stroke-width: 2.5; stroke-dasharray: 4 3 }
+@media (prefers-reduced-motion: no-preference) {
+  .target-halo { animation: spin 6s linear infinite; transform-box: fill-box; transform-origin: center }
+  @keyframes spin { to { transform: rotate(360deg) } }
+}
+
+/* d4 */
+.dice { display: inline-flex; gap: 3px; vertical-align: middle; flex-wrap: wrap }
+.d4 { width: 22px; height: 20px }
+.d4 polygon { fill: var(--surface); stroke: var(--rule); stroke-width: 1.5 }
+.d4 text { font-family: var(--f-mono); font-size: 9px; font-weight: 600; fill: var(--muted) }
+.d4.on polygon { fill: var(--blue-soft); stroke: var(--blue) } .d4.on text { fill: var(--blue) }
+.d4.r.on polygon { fill: var(--red-soft); stroke: var(--red) } .d4.r.on text { fill: var(--red) }
+
+/* 解決結果 */
+.events { display: grid; gap: 10px }
+.ev { background: var(--surface); border: 1px solid var(--rule); padding: 10px 12px; display: grid; gap: 6px }
+.ev.blue { border-left: 3px solid var(--blue) } .ev.red { border-left: 3px solid var(--red) } .ev.both { border-left: 3px solid var(--amber) }
+.ev h4 { margin: 0; font-family: var(--f-display); font-size: 14px }
+.roll { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; font-size: 12.5px }
+.effects { font-size: 12.5px; color: var(--muted) }
+.effects b { color: var(--ink) }
+.sumgrid { display: grid; grid-template-columns: auto 1fr 1fr; gap: 2px 14px; font-size: 13px }
+.sumgrid .mono { text-align: right }
+
+/* 全面画面（タイトル・交代・終了） */
+.screen { flex: 1; display: grid; place-items: center; padding-block: 32px }
+.sheet { width: 100%; max-width: 640px; display: grid; gap: 18px }
+.sheet h1 { font-size: clamp(28px, 6vw, 44px); font-weight: 900; letter-spacing: .01em }
+.sheet .lede { font-size: 15px; max-width: 62ch }
+.choice { display: grid; gap: 8px }
+.choice .btn { text-align: left; display: grid; gap: 2px; padding: 12px 14px }
+.choice .btn small { color: var(--muted); font-size: 12.5px }
+.choice .btn[aria-pressed="true"] { background: var(--amber-soft); color: var(--ink); border-color: var(--amber); box-shadow: inset 3px 0 0 var(--amber) }
+.choice .btn[aria-pressed="true"] small { color: var(--ink) }
+.handover { text-align: center; justify-items: center }
+.handover .big { font-size: clamp(30px, 7vw, 52px); font-family: var(--f-display); font-weight: 900 }
+.score { width: 100%; border-collapse: collapse; font-size: 14px }
+.score th, .score td { padding: 6px 10px; border-bottom: 1px solid var(--rule); text-align: right }
+.score th:first-child, .score td:first-child { text-align: left }
+.score td { font-family: var(--f-mono) }
+
+/* 解決結果の演出：結果を順に出し、ダイスを転がし、交戦した地点を光らせる。動きを減らす設定では静止表示 */
+.flash { fill: none; stroke: var(--amber); stroke-width: 2.5; opacity: .55; pointer-events: none }
+@media (prefers-reduced-motion: no-preference) {
+  .ev { animation: ev-in .28s ease-out backwards; animation-delay: calc(min(var(--i, 0), 8) * 90ms) }
+  .ev .d4 { animation: d4-roll .5s cubic-bezier(.2, .8, .3, 1.2) backwards; animation-delay: calc(min(var(--i, 0), 8) * 90ms + 90ms); transform-origin: 50% 60% }
+  .flash { animation: flash 1.4s ease-out 3 backwards; animation-delay: calc(var(--i, 0) * 200ms) }
+  @keyframes ev-in { from { opacity: 0; transform: translateY(8px) } }
+  @keyframes d4-roll { from { opacity: 0; transform: rotate(-240deg) scale(.3) } }
+  @keyframes flash { from { r: 10px; opacity: .95; stroke-width: 4 } to { r: 38px; opacity: 0; stroke-width: 1 } }
+}

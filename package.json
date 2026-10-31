@@ -1,0 +1,34 @@
+{
+  "name": "archipelago-air-command",
+  "private": true,
+  "version": "0.4.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:artifact": "vite build && node tools/artifact.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "mapgen": "python3 tools/mapgen.py",
+    "build:android": "vite build --mode android && cap sync android",
+    "apk:debug": "npm run build:android && cd android && ./gradlew assembleDebug",
+    "apk:release": "npm run build:android && cd android && ./gradlew assembleRelease",
+    "balance": "AAC_BALANCE=1 vitest run tests/balance.test.ts --silent=false --reporter=verbose"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.5.3",
+    "@capacitor/app": "8.1.2",
+    "@capacitor/core": "8.5.3",
+    "@capacitor/preferences": "8.0.1",
+    "@fontsource/ibm-plex-mono": "5.2.7",
+    "preact": "10.29.8"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.3",
+    "@preact/preset-vite": "2.10.1",
+    "typescript": "5.8.3",
+    "vite": "6.4.5",
+    "vite-plugin-singlefile": "2.2.0",
+    "vitest": "5.0.4"
+  }
+}

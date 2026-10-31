@@ -1,0 +1,75 @@
+# 自動テストと APK のビルド。
+# 署名鍵が Secrets に登録されていればリリース版 APK、なければデバッグ版 APK を作る（docs/06-android.md）。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: テストと Web ビルド
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build:artifact
+
+  apk:
+    name: APK
+    needs: test
+    runs-on: ubuntu-latest
+    env:
+      HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+        with:
+          # 既定の "tools" パッケージは新しい command-line tools に存在しないため、必要なものを明示する
+          packages: platform-tools platforms;android-36 build-tools;36.0.0
+      - run: npm ci
+      - run: npm run build:android
+
+      - name: デバッグ版 APK
+        if: env.HAS_KEYSTORE != 'true'
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: リリース版 APK（署名つき）
+        if: env.HAS_KEYSTORE == 'true'
+        working-directory: android
+        env:
+          AAC_KEYSTORE_PATH: ${{ runner.temp }}/release.jks
+          AAC_KEYSTORE_PASSWORD: ${{ secrets.AAC_KEYSTORE_PASSWORD }}
+          AAC_KEY_ALIAS: ${{ secrets.AAC_KEY_ALIAS }}
+          AAC_KEY_PASSWORD: ${{ secrets.AAC_KEY_PASSWORD }}
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > "$AAC_KEYSTORE_PATH"
+          ./gradlew assembleRelease --no-daemon
+          rm -f "$AAC_KEYSTORE_PATH"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: archipelago-air-command-apk
+          path: android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
