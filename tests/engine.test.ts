@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { S0 } from '../src/data/scenarios';
+import { S0, S1, S2 } from '../src/data/scenarios';
 import { UNIT_TYPES } from '../src/data/units';
 import {
-  band, createGame, emptyPlan, hitDistribution, missionsFor, planCost, resolveTurn, validatePlan, validTargets,
+  band, createGame, emptyPlan, hitDistribution, missionsFor, planCost, planForCpu, resolveTurn, validatePlan, validTargets,
   type GameState, type Plan, type Side,
 } from '../src/engine';
 import { rollD4, seedRng } from '../src/engine/rng';
@@ -65,8 +65,15 @@ describe('射程帯', () => {
 describe('計画の検証', () => {
   it('分散中の部隊は出撃費用が 2', () => {
     const g = createGame(S0, 1);
-    const p = plan([{ unitId: 'B-FTR-1', mission: 'CAP', target: 'ECS' }], { postures: { 'B-FTR-1': 'dispersed' } });
+    g.units['B-FTR-1'].posture = 'dispersed';
+    const p = plan([{ unitId: 'B-FTR-1', mission: 'CAP', target: 'ECS' }]);
     expect(planCost(g, p)).toBe(2);
+  });
+  it('駐機／分散の切り替えは回復フェイズに有効になる', () => {
+    const g = createGame(S0, 1);
+    const r = resolveTurn(g, { blue: plan([], { postures: { 'B-FTR-2': 'dispersed' } }), red: plan() });
+    expect(g.units['B-FTR-2'].posture).toBe('parked');
+    expect(r.state.units['B-FTR-2'].posture).toBe('dispersed');
   });
   it('滑走路の数を超えて出撃できない', () => {
     const g = createGame(S0, 1);
@@ -111,15 +118,16 @@ describe('ターン解決', () => {
   it('ハブ基地を打撃するとエスカレーションが 1 上がる', () => {
     const g = createGame(S0, 5);
     const r = resolveTurn(g, { blue: plan(), red: plan([{ unitId: 'R-LRM-1', mission: 'STANDOFF', target: 'OKI' }]) });
-    expect(r.state.escalation).toBe(4);
+    // 翌日の情勢（停戦交渉の打診）で下がることがあるので、この日の上昇をイベントで確かめる
+    expect(r.report.events).toContainEqual(expect.objectContaining({ kind: 'escalation', from: 3, to: 4 }));
   });
   it('分散中の部隊は基地への打撃で破壊されない', () => {
     for (let seed = 1; seed <= 30; seed++) {
       const g = createGame(S0, seed);
       g.bases.OKI.runway = 0; // 命中はすべて駐機中の部隊に向かう
-      const postures = Object.fromEntries(Object.values(g.units).filter((u) => u.location === 'OKI').map((u) => [u.id, 'dispersed' as const]));
+      for (const u of Object.values(g.units)) if (u.location === 'OKI') u.posture = 'dispersed';
       const r = resolveTurn(g, {
-        blue: plan([], { postures }),
+        blue: plan(),
         red: plan([{ unitId: 'R-LRM-1', mission: 'STANDOFF', target: 'OKI', aim: 'parked' }]),
       });
       for (const u of Object.values(r.state.units)) if (u.location === 'OKI' && u.type !== 'SAM') expect(u.steps).toBe(UNIT_TYPES[u.type].steps);
@@ -162,3 +170,83 @@ function randomPlan(g: GameState, side: Side, r: ReturnType<typeof seedRng>): Pl
   }
   return p;
 }
+
+describe('P2 のルール', () => {
+  it('段階 2 で基地を攻撃すると段階 3 に上がる（スポークなら +1 はない）', () => {
+    const g = createGame(S1, 4);
+    expect(g.escalation).toBe(2);
+    const r = resolveTurn(g, { blue: plan(), red: plan([{ unitId: 'R-LRM-1', mission: 'STANDOFF', target: 'SAK' }]) });
+    expect(r.state.escalation).toBe(3);
+  });
+  it('国力カード：戦略的発信で敵の意志 −1、カードは手札から消える', () => {
+    const g = createGame(S1, 4);
+    g.sides.blue.hand = ['MESSAGE'];
+    const r = resolveTurn(g, { blue: plan([], { card: { card: 'MESSAGE' } }), red: plan() });
+    expect(r.state.sides.red.will).toBe(g.sides.red.will - 1);
+    expect(r.state.sides.blue.hand).not.toContain('MESSAGE');
+  });
+  it('国力カード：基地使用の合意でルソン北部が使えるようになる', () => {
+    const g = createGame(S2, 4);
+    g.sides.red.hand = ['ACCESS'];
+    const r = resolveTurn(g, { blue: plan(), red: plan([], { card: { card: 'ACCESS' } }) });
+    expect(r.state.owners.LUZ).toBe('red');
+  });
+  it('国力カード：基地システム妨害で上限を超えた出撃が取り消される', () => {
+    const g = createGame(S0, 4);
+    g.sides.red.hand = ['CYBER'];
+    g.bases.OKI.runway = 2;
+    const r = resolveTurn(g, {
+      blue: plan([{ unitId: 'B-FTR-1', mission: 'CAP', target: 'ECS' }, { unitId: 'B-FTR-2', mission: 'CAP', target: 'ECS' }]),
+      red: plan([], { card: { card: 'CYBER', target: 'OKI' } }),
+    });
+    expect(r.report.events.filter((e) => e.kind === 'cancelled')).toHaveLength(1);
+  });
+  it('情報フェイズ：偵察機を出した地点は翌日に探知される', () => {
+    const g = createGame(S1, 11);
+    const isr = Object.values(g.units).find((u) => u.side === 'red' && u.type === 'ISR')!;
+    const r = resolveTurn(g, { blue: plan(), red: plan([{ unitId: isr.id, mission: 'RECON', target: 'OKI' }]) });
+    expect(r.state.detected.red).toContain('OKI');
+  });
+  it('防空制圧で命中した地上配備防空はその日は迎撃しない', () => {
+    let sawSead = false;
+    for (let seed = 1; seed <= 20; seed++) {
+      const g = createGame(S0, seed);
+      const r = resolveTurn(g, { blue: plan([{ unitId: 'B-MRF-1', mission: 'SEAD', target: 'ECC' }]), red: plan() });
+      const sead = r.report.events.find((e) => e.kind === 'sead');
+      expect(sead).toBeTruthy();
+      if (sead && sead.kind === 'sead' && sead.rolls[0].hits > 0) {
+        sawSead = true;
+        expect(r.report.events.some((e) => e.kind === 'sam' && e.area === 'ECC')).toBe(false);
+      }
+    }
+    expect(sawSead).toBe(true);
+  });
+  it('CPU の計画は常に検証を通る', () => {
+    for (const sc of [S0, S1, S2]) {
+      for (let seed = 1; seed <= 10; seed++) {
+        let g = createGame(sc, seed);
+        while (!g.outcome) {
+          const plans = { blue: planForCpu(g, 'blue', 'normal'), red: planForCpu(g, 'red', seed % 2 ? 'easy' : 'normal') };
+          expect(validatePlan(g, 'blue', plans.blue)).toEqual([]);
+          expect(validatePlan(g, 'red', plans.red)).toEqual([]);
+          g = resolveTurn(g, plans).state;
+        }
+      }
+    }
+  }, 60_000);
+  it('標準の CPU は席を入れ替えても易しい CPU に勝ち越す（S0、各 30 局）', () => {
+    let normalWins = 0, easyWins = 0;
+    for (let seed = 1; seed <= 60; seed++) {
+      const normal: Side = seed % 2 ? 'blue' : 'red';
+      let g = createGame(S0, seed * 31);
+      while (!g.outcome) {
+        g = resolveTurn(g, {
+          blue: planForCpu(g, 'blue', normal === 'blue' ? 'normal' : 'easy'),
+          red: planForCpu(g, 'red', normal === 'red' ? 'normal' : 'easy'),
+        }).state;
+      }
+      if (g.outcome.kind === 'victory') g.outcome.winner === normal ? normalWins++ : easyWins++;
+    }
+    expect(normalWins).toBeGreaterThan(easyWins);
+  }, 60_000);
+});

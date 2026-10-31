@@ -129,6 +129,8 @@ button:focus-visible, .hit:focus-visible { outline: 2px solid var(--amber); outl
 .choice { display: grid; gap: 8px }
 .choice .btn { text-align: left; display: grid; gap: 2px; padding: 12px 14px }
 .choice .btn small { color: var(--muted); font-size: 12.5px }
+.choice .btn[aria-pressed="true"] { background: var(--amber-soft); color: var(--ink); border-color: var(--amber); box-shadow: inset 3px 0 0 var(--amber) }
+.choice .btn[aria-pressed="true"] small { color: var(--ink) }
 .handover { text-align: center; justify-items: center }
 .handover .big { font-size: clamp(30px, 7vw, 52px); font-family: var(--f-display); font-weight: 900 }
 .score { width: 100%; border-collapse: collapse; font-size: 14px }

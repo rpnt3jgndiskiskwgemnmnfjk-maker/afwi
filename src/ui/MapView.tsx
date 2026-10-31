@@ -15,6 +15,8 @@ interface Props {
   targets: string[];
   lines: MapLine[];
   zoom?: boolean;
+  /** 誰の目で見るか。'all' は霧なし（1 人で両軍）、'public' は双方に見えてよいものだけ（2 人対戦の結果画面） */
+  viewer: Side | 'all' | 'public';
   onPick: (id: string) => void;
 }
 
@@ -36,13 +38,19 @@ function anchor(id: string): [number, number] {
   return f ? [f.x + BOX_W / 2, f.y + BOX_H / 2] : posOf(id);
 }
 
-export function MapView({ game, selected, ring, targets, lines, zoom, onPick }: Props) {
+export function MapView({ game, selected, ring, targets, lines, zoom, viewer, onPick }: Props) {
   const counts: Record<string, Record<Side, number>> = {};
   for (const u of aliveUnits(game)) {
     counts[u.location] ??= { blue: 0, red: 0 };
     counts[u.location][u.side] += 1;
   }
   const targetSet = new Set(targets);
+  /** その地点のその陣営の部隊数が見えるか（自軍、霧なし、探知済み） */
+  const visible = (s: Side, loc: string) => {
+    if (viewer === 'all') return true;
+    if (viewer === 'public') return game.detected[s === 'blue' ? 'red' : 'blue'].includes(loc);
+    return s === viewer || game.detected[viewer].includes(loc);
+  };
   const key = (e: KeyboardEvent, id: string) => {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(id); }
   };
@@ -82,7 +90,7 @@ export function MapView({ game, selected, ring, targets, lines, zoom, onPick }: 
               ? <circle cx={x} cy={y} r={9} fill="var(--surface)" stroke={sel ? 'var(--amber)' : 'var(--muted)'} stroke-width={sel ? 4 : 2} />
               : (() => {
                   const r = l.base === 'hub' ? 11 : 7;
-                  return <rect x={x - r} y={y - r} width={r * 2} height={r * 2} fill={l.base === 'hub' ? sideColor(l.owner) : 'var(--surface)'} stroke={sel ? 'var(--amber)' : sideColor(l.owner)} stroke-width={sel ? 4 : 2.5} />;
+                  return <rect x={x - r} y={y - r} width={r * 2} height={r * 2} fill={l.base === 'hub' ? sideColor(game.owners[l.id] ?? l.owner) : 'var(--surface)'} stroke={sel ? 'var(--amber)' : sideColor(game.owners[l.id] ?? l.owner)} stroke-width={sel ? 4 : 2.5} />;
                 })()}
             {targetSet.has(l.id) && <circle class="target-halo" cx={x} cy={y} r={19} />}
             <text x={x + 15} y={y + 4}>{l.name}</text>
@@ -95,8 +103,10 @@ export function MapView({ game, selected, ring, targets, lines, zoom, onPick }: 
             )}
             {c && (['blue', 'red'] as Side[]).filter((s) => c[s] > 0).map((s, i) => (
               <g>
-                <rect x={x + 42 + i * 22} y={y + 6} width={20} height={13} fill={sideColor(s)} />
-                <text class="chipt" x={x + 52 + i * 22} y={y + 16} text-anchor="middle">{c[s]}</text>
+                {visible(s, l.id)
+                  ? <rect x={x + 42 + i * 22} y={y + 6} width={20} height={13} fill={sideColor(s)} />
+                  : <rect x={x + 42 + i * 22} y={y + 6} width={20} height={13} fill="var(--surface)" stroke={sideColor(s)} stroke-dasharray="3 2" />}
+                <text class="chipt" x={x + 52 + i * 22} y={y + 16} text-anchor="middle" style={visible(s, l.id) ? undefined : { fill: sideColor(s) }}>{visible(s, l.id) ? c[s] : '?'}</text>
               </g>
             ))}
             <circle class="hit" cx={x} cy={y} r={22} fill="transparent" tabIndex={0} role="button" aria-label={l.name} onClick={() => onPick(l.id)} onKeyDown={(e) => key(e as KeyboardEvent, l.id)} />
@@ -108,13 +118,14 @@ export function MapView({ game, selected, ring, targets, lines, zoom, onPick }: 
         const f = BOX_FRAMES[l.id];
         const sel = selected === l.id;
         const c = counts[l.id]?.[l.side!] ?? 0;
+        const shown = visible(l.side!, l.id);
         return (
           <g>
             <rect x={f.x} y={f.y} width={BOX_W} height={BOX_H} fill="var(--surface)" stroke={sel ? 'var(--amber)' : sideColor(l.side)} stroke-width={sel ? 3 : 1.6} stroke-dasharray="5 4" />
             {targetSet.has(l.id) && <rect class="target-halo" x={f.x - 4} y={f.y - 4} width={BOX_W + 8} height={BOX_H + 8} />}
             <text class="boxlbl" x={f.x + 8} y={f.y + 14}>マップ外 · {l.side === 'blue' ? '青' : '赤'} · {l.role === 'rear' ? '後方' : 'スタンドオフ'}</text>
             <text class="boxname" x={f.x + 8} y={f.y + 32}>{l.name.replace('（グアム・第二列島線）', '（グアム）')}</text>
-            {c > 0 && <g><rect x={f.x + BOX_W - 28} y={f.y + 6} width={20} height={13} fill={sideColor(l.side)} /><text class="chipt" x={f.x + BOX_W - 18} y={f.y + 16} text-anchor="middle">{c}</text></g>}
+            {c > 0 && <g><rect x={f.x + BOX_W - 28} y={f.y + 6} width={20} height={13} fill={sideColor(l.side)} /><text class="chipt" x={f.x + BOX_W - 18} y={f.y + 16} text-anchor="middle">{shown ? c : '?'}</text></g>}
             {l.role === 'standoff' && <text class="boxlbl" x={f.x + BOX_W - 8} y={f.y + 34} text-anchor="end">弾 {game.sides[l.side!].salvos}</text>}
             <rect class="hit" x={f.x} y={f.y} width={BOX_W} height={BOX_H} fill="transparent" tabIndex={0} role="button" aria-label={`マップ外ボックス ${l.name}`} onClick={() => onPick(l.id)} onKeyDown={(e) => key(e as KeyboardEvent, l.id)} />
           </g>

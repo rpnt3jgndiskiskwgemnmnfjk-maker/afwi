@@ -3,7 +3,7 @@
 
 import type { Session } from './App';
 
-const KEY = 'aac.session.v1';
+const KEY = 'aac.session.v2';
 
 export function saveSession(s: Session) {
   try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* 保存できなくても続行 */ }
@@ -14,7 +14,7 @@ export function loadSession(): Session | null {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
     const s = JSON.parse(raw) as Session;
-    return s?.version === 1 && s.game?.schemaVersion === 1 ? s : null;
+    return s?.version === 2 && s.game?.schemaVersion === 2 ? s : null;
   } catch {
     return null;
   }

@@ -12,8 +12,8 @@
 | [docs/02-game-design.md](docs/02-game-design.md) | ゲームデザイン仕様（地図、部隊、ACE、ターン手順、戦闘判定、勝利条件） |
 | [docs/03-architecture.md](docs/03-architecture.md) | 技術設計（実装方式、構成、データ型、ビルド、テスト、開発計画、リスク） |
 | [src/data/map.json](src/data/map.json) | 作戦地図の定義（17エリア、マップ外ボックス5つ、射程帯の表）。`npm run mapgen` で生成 |
-
 | [docs/04-prototype-p1.md](docs/04-prototype-p1.md) | P1 試作の実装範囲、簡略化した点、開発の手順 |
+| [docs/05-prototype-p2.md](docs/05-prototype-p2.md) | P2（全ルール、S1・S2、CPU）の実装範囲と、CPU 同士の対戦による確認結果 |
 
 ## 開発
 
@@ -27,7 +27,7 @@ npm run build:artifact   # 単一 HTML（dist/index.html）とアーティファ
 ## 進め方
 
 1. P0 設計（完了）: 設計書をアーティファクトで確認し、未決事項を決定
-2. P1 試作（実装済み・確認中）: ブラウザで遊べる試作をアーティファクトで確認
-3. P2 ルール完成と CPU
+2. P1 試作（完了）: ブラウザで遊べる試作をアーティファクトで確認
+3. P2 ルール完成と CPU（実装済み・確認中）
 4. P3 Capacitor で Android 化し、CI で APK を生成
 5. P4 バランス調整 → P5 v1.0

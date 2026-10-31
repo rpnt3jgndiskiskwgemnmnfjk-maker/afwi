@@ -19,7 +19,8 @@ page.on('console', (m) => m.type() === 'error' && !m.text().includes('fonts.g') 
 
 await page.goto(url);
 await shot(page, '0-title');
-await page.getByRole('button', { name: /1 人で両軍を操作する/ }).click();
+await page.getByRole('button', { name: '1 人で両軍を操作' }).click();
+await page.getByRole('button', { name: 'この設定で始める' }).click();
 
 /** 地点 → 部隊 → 任務 → 目標の順に選ぶ */
 async function order(loc, unitLabel, mission, target) {
@@ -55,12 +56,29 @@ for (let turn = 1; turn <= 3; turn++) {
 }
 await shot(page, '3-end');
 const endText = await page.locator('h1').first().innerText();
-console.log('最終画面:', endText);
+console.log('S0 最終画面:', endText);
+
+// CPU 対戦（S1・標準）：青で毎日 1 機だけ制空を出し、最後まで進める
+await page.getByRole('button', { name: 'タイトルへ' }).click();
+await page.getByRole('button', { name: /^S1「第一列島線」/ }).click();
+await page.getByRole('button', { name: 'CPU と対戦' }).click();
+await page.getByRole('button', { name: 'この設定で始める' }).click();
+await shot(page, '6-cpu-plan');
+for (let turn = 1; turn <= 8; turn++) {
+  await order('沖縄', '青 FTR-3', '制空', '東シナ海');
+  await page.getByRole('button', { name: '計画を確定する' }).click();
+  if (turn === 2) await shot(page, '7-cpu-result');
+  const next = page.getByRole('button', { name: /へ進む|最終結果/ });
+  const label = await next.innerText();
+  await next.click();
+  if (label.includes('最終結果')) break;
+}
+console.log('S1 CPU 対戦の最終画面:', await page.locator('h1').first().innerText());
 
 // スマホ横持ち
 const phone = await browser.newPage({ viewport: { width: 844, height: 390 } });
 await phone.goto(url);
-await phone.getByRole('button', { name: /1 人で両軍を操作する/ }).click();
+await phone.getByRole('button', { name: 'この設定で始める' }).click();
 await phone.screenshot({ path: new URL('4-phone.png', outDir).pathname });
 await phone.getByRole('button', { name: '拡大' }).click();
 await phone.screenshot({ path: new URL('5-phone-zoom.png', outDir).pathname });

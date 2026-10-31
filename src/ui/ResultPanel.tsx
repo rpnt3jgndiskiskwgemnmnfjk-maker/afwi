@@ -1,3 +1,4 @@
+import { CARDS } from '../data/cards';
 import { LOC, sideJa, unitLabel, type GameEvent, type GameState, type Side, type TurnReport } from '../engine';
 import { RollLine } from './Dice';
 
@@ -6,12 +7,15 @@ const nameOf = (game: GameState, id: string) => (game.units[id] ? unitLabel(game
 export function ResultPanel({ game, report, onNext }: { game: GameState; report: TurnReport; onNext: () => void }) {
   const ev = report.events;
   const pick = <K extends GameEvent['kind']>(k: K) => ev.filter((e): e is Extract<GameEvent, { kind: K }> => e.kind === k);
+  const cards = pick('card');
+  const cancelled = pick('cancelled');
+  const sead = pick('sead');
   const standoff = pick('standoff');
   const air = pick('air');
   const sam = pick('sam');
   const strike = pick('strike');
-  const tally = ev.filter((e) => ['move', 'repair', 'logistics', 'will', 'escalation', 'vp'].includes(e.kind));
-  const nothing = !standoff.length && !air.length && !sam.length && !strike.length;
+  const tally = ev.filter((e) => ['move', 'posture', 'repair', 'logistics', 'will', 'escalation', 'vp'].includes(e.kind));
+  const nothing = !standoff.length && !air.length && !sam.length && !strike.length && !sead.length;
 
   return (
     <>
@@ -20,6 +24,18 @@ export function ResultPanel({ game, report, onNext }: { game: GameState; report:
         {nothing && <p class="muted">交戦はありませんでした。</p>}
       </div>
       <div class="events">
+        {cards.map((e) => (
+          <div class={`ev ${e.side}`}>
+            <h4>国力カード：{sideJa(e.side)}「{CARDS[e.card].name}」{e.target ? `（${LOC[e.target].name}）` : ''}</h4>
+            <p class="effects">{CARDS[e.card].domain}・{e.effects.length ? e.effects.join('、') : CARDS[e.card].text}</p>
+          </div>
+        ))}
+        {cancelled.length > 0 && (
+          <div class="ev both">
+            <h4>出撃の取り消し</h4>
+            {cancelled.map((e) => <p class="effects">{nameOf(game, e.unitId)}：{e.reason}</p>)}
+          </div>
+        )}
         {standoff.map((e) => (
           <div class={`ev ${e.side}`}>
             <h4>スタンドオフ打撃：{sideJa(e.side)} → {LOC[e.target].name}</h4>
@@ -36,6 +52,13 @@ export function ResultPanel({ game, report, onNext }: { game: GameState; report:
             {(['blue', 'red'] as Side[]).map((s) => e.rolls[s].map((r) => <RollLine roll={r} side={s} label={nameOf(game, r.unitId)} />))}
             <Effects list={e.effects} />
             <p class="effects">航空優勢：<b class={e.superiority ?? ''}>{e.superiority ? sideJa(e.superiority) : 'なし（争奪中）'}</b></p>
+          </div>
+        ))}
+        {sead.map((e) => (
+          <div class={`ev ${e.side}`}>
+            <h4>防空制圧：{sideJa(e.side)} → {LOC[e.target].name}</h4>
+            {e.rolls.map((r) => <RollLine roll={r} side={e.side} label={nameOf(game, r.unitId)} />)}
+            <Effects list={e.effects} />
           </div>
         ))}
         {sam.map((e) => (
@@ -73,6 +96,7 @@ function Effects({ list }: { list: string[] }) {
 function tallyText(game: GameState, e: GameEvent): string {
   switch (e.kind) {
     case 'move': return `${nameOf(game, e.unitId)} が ${LOC[e.from].name} から ${LOC[e.to].name} へ転地`;
+    case 'posture': return `${nameOf(game, e.unitId)} を${e.posture === 'dispersed' ? '分散' : '駐機'}に切り替え`;
     case 'repair': return `${sideJa(e.side)}：${LOC[e.base].name} の滑走路を修復（${e.runway}/3）`;
     case 'logistics': return `${sideJa(e.side)}：兵站 ${e.delta >= 0 ? '+' : '−'}${Math.abs(e.delta)}（${e.reason}）`;
     case 'will': return `${sideJa(e.side)}：国民の意志 ${e.delta >= 0 ? '+' : '−'}${Math.abs(e.delta)}（${e.reason}）`;

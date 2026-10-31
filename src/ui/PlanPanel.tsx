@@ -1,8 +1,10 @@
+import { CARDS, SITUATIONS } from '../data/cards';
 import { UNIT_TYPES } from '../data/units';
 import {
-  band, controllerOf, describeMods, finalTarget, hitProb, isHub, LOC, MISSION_LABEL, missionsFor, orderOf, planCost,
-  postureOf, reach, REPAIR_COST, sortieCost, sortieLimit, sortiesFrom, unitLabel, unitsAt, validatePlan, validTargets,
-  isDamaged, type GameState, type Mission, type Mod, type Plan, type Side, type StrikeAim, type Unit,
+  band, cardPlayable, cardTargets, describeMods, finalTarget, hitProb, isHub, LOC, MISSION_LABEL, missionsFor, orderOf,
+  ownerOf, planCost, postureOf, reach, repairCost, sizeHint, sortieCost, sortieLimit, sortiesFrom, unitLabel, unitsAt,
+  validatePlan, validTargets, visibleEnemies, isDamaged,
+  type CardId, type GameState, type Mission, type Mod, type Plan, type Side, type StrikeAim, type Unit,
 } from '../engine';
 import { targetText } from './Dice';
 
@@ -24,18 +26,33 @@ interface Props {
 }
 
 const sideName = (s: Side) => (s === 'blue' ? '青軍' : '赤軍');
+const ATTACKS = new Set<Mission>(['STRIKE', 'SEAD', 'STANDOFF']);
 
 export function Pips({ n, max }: { n: number; max: number }) {
   return <span class="pips">{Array.from({ length: max }, (_, i) => <i class={i < n ? '' : 'x'} />)}</span>;
 }
 
-/** 計画時点で分かる修正（敵の出方で決まる数的劣勢・航空優勢は含めない） */
+/** 計画時点で分かる修正（敵の出方で決まる数的劣勢・航空優勢・ステルスは含めない） */
 export function knownMods(game: GameState, plan: Plan, u: Unit, mission: Mission, target: string): Mod[] {
   const mods: Mod[] = [];
+  const seen = game.detected[u.side].includes(target);
   if (mission === 'CAP' && plan.orders.some((o) => o.mission === 'AEW' && o.target === target)) mods.push({ label: 'AEW 支援', delta: -1 });
-  if ((mission === 'CAP' || mission === 'STRIKE') && reach(plan, u, target).atLimit) mods.push({ label: '行動半径ちょうど', delta: 1 });
-  if (mission === 'STRIKE' && unitsAt(game, target).some((x) => x.type === 'SAM' && x.side !== u.side)) mods.push({ label: '防空が健在', delta: 1 });
+  if ((mission === 'CAP' || mission === 'STRIKE' || mission === 'SEAD') && reach(plan, u, target).atLimit) mods.push({ label: '行動半径ちょうど', delta: 1 });
+  if (ATTACKS.has(mission) && LOC[target].kind !== 'contested' && !seen) mods.push({ label: '目標未探知', delta: 1 });
+  if (mission === 'STRIKE' && seen && unitsAt(game, target).some((x) => x.type === 'SAM' && x.side !== u.side)) mods.push({ label: '防空が健在（SEAD で消せる）', delta: 1 });
+  if (mission === 'CAP' && game.situation?.id === 'WEATHER' && game.situation.area === target) mods.push({ label: '悪天候', delta: 1 });
   return mods;
+}
+
+/** 基地への攻撃によるエスカレーションの見込み */
+function escalationNote(game: GameState, target: string): string | null {
+  const l = LOC[target];
+  let to = game.escalation;
+  const why: string[] = [];
+  if (l.kind === 'base' && to < 3) { to = 3; why.push('基地への攻撃'); }
+  if (l.kind === 'box' || isHub(target)) { to += 1; why.push(l.kind === 'box' ? '後方ボックスへの攻撃' : 'ハブ基地への攻撃'); }
+  if (to === game.escalation) return null;
+  return `${why.join('と')}でエスカレーション ${game.escalation}→${Math.min(5, to)}${to >= 5 ? '。段階 5 で双方が敗北します' : ''}`;
 }
 
 export function PlanPanel(p: Props) {
@@ -45,6 +62,7 @@ export function PlanPanel(p: Props) {
   const s = game.sides[side];
   const unit = p.selUnit ? game.units[p.selUnit] : null;
   const loc = p.selLoc ? LOC[p.selLoc] : null;
+  const sit = game.situation;
 
   const removeOrder = (unitId: string) => p.setPlan({ ...plan, orders: plan.orders.filter((o) => o.unitId !== unitId) });
   const toggleRepair = (b: string) =>
@@ -67,10 +85,17 @@ export function PlanPanel(p: Props) {
         <div class="row">
           <span>兵站 <b class="mono">{s.logistics}</b> → 計画後 <b class={`mono${s.logistics - cost < 0 ? ' red' : ''}`}>{s.logistics - cost}</b></span>
           <span class="muted">スタンドオフ弾 {s.salvos}</span>
+          {s.sanctions > 0 && <span class="warn">経済制裁中（兵站の生成 −1）</span>}
         </div>
         {errs.map((e) => <p class="err">{e}</p>)}
       </div>
 
+      {sit && (
+        <div class="card hint">
+          <span class="label">今日の情勢</span>
+          <p><b>{SITUATIONS[sit.id].name}</b>：{sit.effects.length ? sit.effects.join('、') : SITUATIONS[sit.id].text}</p>
+        </div>
+      )}
       {p.hint && <div class="card hint"><span class="label">手引き</span><p>{p.hint}</p></div>}
 
       {loc ? (
@@ -79,14 +104,14 @@ export function PlanPanel(p: Props) {
             <h3>{loc.name}</h3>
             <span class="mono muted">{loc.id}</span>
           </div>
-          <p class="muted">{locKind(loc.id)}</p>
+          <p class="muted">{locKind(game, loc.id)}</p>
           {game.bases[loc.id] && (
             <div class="row">
               <span>滑走路 <Pips n={game.bases[loc.id].runway} max={3} /> <span class="mono">{game.bases[loc.id].runway}/3</span></span>
-              {controllerOf(loc.id) === side && <span class="muted">出撃 {sortiesFrom(game, plan, loc.id)}/{sortieLimit(game, loc.id)}</span>}
-              {controllerOf(loc.id) === side && game.bases[loc.id].runway < 3 && (
+              {ownerOf(game, loc.id) === side && <span class="muted">出撃 {sortiesFrom(game, plan, loc.id)}/{sortieLimit(game, loc.id)}</span>}
+              {ownerOf(game, loc.id) === side && game.bases[loc.id].runway < 3 && (
                 <button class="btn small" aria-pressed={plan.repairs.includes(loc.id)} onClick={() => toggleRepair(loc.id)}>
-                  {plan.repairs.includes(loc.id) ? '修復を取り消す' : `修復する（兵站 ${REPAIR_COST}）`}
+                  {plan.repairs.includes(loc.id) ? '修復を取り消す' : `修復する（兵站 ${repairCost(plan, loc.id)}）`}
                 </button>
               )}
             </div>
@@ -101,6 +126,8 @@ export function PlanPanel(p: Props) {
         <UnitCard {...p} unit={unit} onRemove={() => removeOrder(unit.id)} />
       )}
 
+      <CardHand game={game} side={side} plan={plan} setPlan={p.setPlan} />
+
       <div class="card">
         <div class="between"><h3>任務一覧</h3><span class="mono muted">費用 {cost}</span></div>
         {plan.orders.length === 0 && plan.repairs.length === 0 && <p class="muted">まだ任務がありません。何もしない日にしても構いません。</p>}
@@ -110,27 +137,32 @@ export function PlanPanel(p: Props) {
             <div class="orderline">
               <button class="btn ghost small" style="text-align:left;border:0;padding:0" onClick={() => p.onSelectUnit(u.id)}>
                 <b>{unitLabel(u)}</b> {LOC[u.location].name} → {LOC[o.target].name}・{MISSION_LABEL[o.mission]}
-                {o.aim === 'parked' && '（駐機機狙い）'} <span class="muted mono">兵站 {sortieCost(u, plan)}</span>
+                {o.aim === 'parked' && '（駐機機狙い）'} <span class="muted mono">兵站 {sortieCost(u)}</span>
               </button>
               <button class="btn small" onClick={() => removeOrder(u.id)} aria-label={`${unitLabel(u)} の任務を取り消す`}>取消</button>
             </div>
           );
         })}
         {plan.repairs.map((b) => (
-          <div class="orderline"><span>{LOC[b].name} の滑走路を修復 <span class="muted mono">兵站 {REPAIR_COST}</span></span><button class="btn small" onClick={() => toggleRepair(b)}>取消</button></div>
+          <div class="orderline"><span>{LOC[b].name} の滑走路を修復 <span class="muted mono">兵站 {repairCost(plan, b)}</span></span><button class="btn small" onClick={() => toggleRepair(b)}>取消</button></div>
         ))}
+        {Object.entries(plan.postures).map(([id, ps]) => (
+          <div class="orderline"><span>{unitLabel(game.units[id])} を{ps === 'dispersed' ? '分散' : '駐機'}に切り替え（翌日から）</span><button class="btn small" onClick={() => togglePosture(game.units[id])}>取消</button></div>
+        ))}
+        {plan.card && <div class="orderline"><span>国力カード：{CARDS[plan.card.card].name}{plan.card.target ? `（${LOC[plan.card.target].name}）` : ''}</span><button class="btn small" onClick={() => p.setPlan({ ...plan, card: undefined })}>取消</button></div>}
         <button class="btn primary" disabled={errs.length > 0} onClick={p.onConfirm}>計画を確定する</button>
       </div>
     </>
   );
 }
 
-function locKind(id: string): string {
+function locKind(game: GameState, id: string): string {
   const l = LOC[id];
   if (l.kind === 'box') return `マップ外ボックス（${l.side === 'blue' ? '青' : '赤'}・${l.role === 'rear' ? '後方：敵機は攻撃できない' : 'スタンドオフ打撃'}）`;
-  if (l.kind === 'contested') return '争奪エリア';
-  const owner = l.owner === 'blue' ? '青' : l.owner === 'red' ? '赤' : '中立';
-  return `${l.base === 'hub' ? 'ハブ基地（兵站 +2/日）' : 'スポーク基地（収容 2）'}・${owner}`;
+  if (l.kind === 'contested') return game.keyAreas.includes(id) ? '争奪エリア・要域（航空優勢で勝利点）' : '争奪エリア';
+  const owner = ownerOf(game, id);
+  const ownerJa = owner === 'blue' ? '青' : owner === 'red' ? '赤' : '中立（外交カードで使用可）';
+  return `${l.base === 'hub' ? 'ハブ基地（兵站 +2/日）' : 'スポーク基地（収容 2）'}・${ownerJa}`;
 }
 
 function UnitList({ game, plan, side, loc, selUnit, onSelect, onPosture }: {
@@ -138,7 +170,8 @@ function UnitList({ game, plan, side, loc, selUnit, onSelect, onPosture }: {
   onSelect: (id: string | null) => void; onPosture: (u: Unit) => void;
 }) {
   const own = unitsAt(game, loc, side);
-  const enemy = unitsAt(game, loc).filter((u) => u.side !== side);
+  const seen = visibleEnemies(game, side, loc);
+  const enemyCount = unitsAt(game, loc).filter((u) => u.side !== side).length;
   const onMapBase = LOC[loc].kind === 'base';
   return (
     <div class="units">
@@ -146,28 +179,67 @@ function UnitList({ game, plan, side, loc, selUnit, onSelect, onPosture }: {
         const t = UNIT_TYPES[u.type];
         const o = orderOf(plan, u.id);
         const canPosture = onMapBase && u.type !== 'SAM';
+        const planned = plan.postures[u.id];
         return (
           <div class={`unit${selUnit === u.id ? ' sel' : ''}`}>
             <span class={`badge ${u.side}`}>{u.type}</span>
             <button class="btn ghost small" style="text-align:left;border:0;padding:0;min-height:0" onClick={() => onSelect(u.id)}>
               <div>{unitLabel(u)} <span class="muted">{t.name}</span> <span class={u.side}><Pips n={u.steps} max={t.steps} /></span></div>
-              <div class="meta">{o ? `${MISSION_LABEL[o.mission]} → ${LOC[o.target].name}` : missionsFor(game, u).length ? '待機' : '任務なし（防空として迎撃）'}</div>
+              <div class="meta">
+                {o ? `${MISSION_LABEL[o.mission]} → ${LOC[o.target].name}` : missionsFor(game, u).length ? '待機' : '任務なし（防空として迎撃）'}
+                {onMapBase && u.type !== 'SAM' && `・${u.posture === 'dispersed' ? '分散中' : '駐機中'}${planned ? `（翌日から${planned === 'dispersed' ? '分散' : '駐機'}）` : ''}`}
+              </div>
             </button>
             {canPosture
-              ? <button class="btn small" aria-pressed={postureOf(u, plan) === 'dispersed'} onClick={() => onPosture(u)} title="分散すると打撃で破壊されないが出撃費用 +1">{postureOf(u, plan) === 'dispersed' ? '分散' : '駐機'}</button>
+              ? <button class="btn small" aria-pressed={postureOf(u, plan) === 'dispersed'} onClick={() => onPosture(u)} title="分散すると打撃で破壊されないが出撃費用 +1。切り替えは翌日から">{postureOf(u, plan) === 'dispersed' ? '分散' : '駐機'}</button>
               : <span />}
           </div>
         );
       })}
       {own.length === 0 && <p class="muted">自軍の部隊はいません。</p>}
-      {enemy.length > 0 && (
-        <p class="muted">敵：{Object.entries(groupBy(enemy)).map(([k, n]) => `${k}×${n}`).join('、')}</p>
-      )}
+      {seen && seen.length > 0 && <p class="muted">敵（探知済み）：{Object.entries(groupBy(seen)).map(([k, n]) => `${k}×${n}`).join('、')}</p>}
+      {!seen && enemyCount > 0 && <p class="muted">敵：未探知（{sizeHint(enemyCount)}）</p>}
     </div>
   );
 }
 
 const groupBy = (us: Unit[]) => us.reduce<Record<string, number>>((m, u) => ((m[u.type] = (m[u.type] ?? 0) + 1), m), {});
+
+function CardHand({ game, side, plan, setPlan }: { game: GameState; side: Side; plan: Plan; setPlan: (p: Plan) => void }) {
+  const hand = game.sides[side].hand;
+  const choose = (c: CardId, target?: string) => setPlan({ ...plan, card: { card: c, target } });
+  return (
+    <div class="card">
+      <div class="between"><h3>国力カード</h3><span class="muted">1 日 1 枚・山札 {game.sides[side].deck.length}</span></div>
+      {hand.length === 0 && <p class="muted">手札がありません。</p>}
+      <div class="units">
+        {hand.map((c, i) => {
+          const def = CARDS[c];
+          const why = cardPlayable(game, side, c);
+          const chosen = plan.card?.card === c && hand.indexOf(c) === i;
+          const targets = def.target === 'none' ? [] : cardTargets(game, side, c);
+          return (
+            <div class={`unit${chosen ? ' sel' : ''}`} style="grid-template-columns:auto minmax(0,1fr)">
+              <span class="badge" style="background:var(--ink);color:var(--surface)">{def.domain}</span>
+              <div>
+                <div><b>{def.name}</b> <span class="muted" style="font-size:12.5px">{def.text}</span></div>
+                {why ? <div class="meta">{why}</div> : (
+                  <div class="row" style="margin-top:4px">
+                    {def.target === 'none'
+                      ? <button class="btn small" aria-pressed={chosen} onClick={() => (chosen ? setPlan({ ...plan, card: undefined }) : choose(c))}>{chosen ? '使う（選択中）' : '使う'}</button>
+                      : targets.map((t) => (
+                        <button class="btn small" aria-pressed={chosen && plan.card?.target === t} onClick={() => choose(c, t)}>{LOC[t].name}</button>
+                      ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function UnitCard(p: Props & { unit: Unit; onRemove: () => void }) {
   const { game, plan, unit, mission } = p;
@@ -199,6 +271,7 @@ function UnitCard(p: Props & { unit: Unit; onRemove: () => void }) {
           {ms.map((m) => <button class="btn small" aria-pressed={mission === m} onClick={() => p.onMission(mission === m ? null : m)}>{MISSION_LABEL[m]}</button>)}
         </div>
       )}
+      {mission && <p class="muted" style="font-size:12.5px">{MISSION_HELP[mission]}</p>}
       {mission && (mission === 'STRIKE' || mission === 'STANDOFF') && (
         <div class="row" role="group" aria-label="狙い">
           <span class="muted">狙い</span>
@@ -217,15 +290,27 @@ function UnitCard(p: Props & { unit: Unit; onRemove: () => void }) {
   );
 }
 
+const MISSION_HELP: Record<Mission, string> = {
+  CAP: '争奪エリアか自軍の基地の上空で敵機と戦います。残った側が航空優勢を取ります。',
+  STRIKE: '敵の基地を攻撃し、滑走路か駐機中の部隊を壊します。',
+  SEAD: '敵の基地の地上配備防空を叩きます。命中した防空はその日は迎撃できません。',
+  STANDOFF: '航空戦を経ずに敵の基地を攻撃します。目標の防空が基準 4 で迎撃します。',
+  AEW: '同じエリアの味方の制空の命中基準 −1。翌日の探知にも役立ちます。',
+  RECON: '選んだ地点を翌日の情報フェイズで必ず探知します。',
+  TANKER: '同じ目標に向かう味方の行動半径 +1。',
+  AIRLIFT: '自軍の基地へ補給を運びます。兵站 +1、その基地の修復費用 −1。',
+  MOVE: '別の自軍の基地かボックスへ移ります。翌日から使えます。',
+};
+
 function TargetRow(p: Props & { unit: Unit; mission: Mission; target: string }) {
   const { game, plan, unit, mission, target } = p;
   const t = UNIT_TYPES[unit.type];
   const r = reach(plan, unit, target);
-  const showOdds = mission === 'CAP' || mission === 'STRIKE' || mission === 'STANDOFF';
+  const showOdds = mission === 'CAP' || ATTACKS.has(mission);
   const mods = knownMods(game, plan, unit, mission, target);
   const ft = finalTarget(t.target, mods);
   const dice = Math.max(0, (mission === 'CAP' ? t.aaDice : t.agDice) - (isDamaged(unit) ? 1 : 0));
-  const escal = (mission === 'STRIKE' || mission === 'STANDOFF') && (isHub(target) || LOC[target].kind === 'box');
+  const esc = ATTACKS.has(mission) ? escalationNote(game, target) : null;
   return (
     <button class="unit" onClick={() => p.onAssign(target)}>
       <span class="mono" style="min-width:38px">{Number.isFinite(band(unit.location, target)) ? `${r.band}帯` : '—'}</span>
@@ -238,9 +323,9 @@ function TargetRow(p: Props & { unit: Unit; mission: Mission; target: string }) 
             {mission === 'STANDOFF' && '・防空の迎撃は基準 4'}
           </div>
         )}
-        {escal && <div class="warn">実行するとエスカレーション +1（{game.escalation}→{game.escalation + 1}）{game.escalation >= 4 ? '。段階 5 で双方が敗北します' : ''}</div>}
+        {esc && <div class="warn">{esc}</div>}
       </span>
-      <span class="mono muted">兵站 {sortieCost(unit, plan)}</span>
+      <span class="mono muted">兵站 {sortieCost(unit)}</span>
     </button>
   );
 }
