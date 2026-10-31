@@ -44,6 +44,9 @@ jobs:
           java-version: 21
           cache: gradle
       - uses: android-actions/setup-android@v3
+        with:
+          # 既定の "tools" パッケージは新しい command-line tools に存在しないため、必要なものを明示する
+          packages: platform-tools platforms;android-36 build-tools;36.0.0
       - run: npm ci
       - run: npm run build:android
 
