@@ -150,7 +150,7 @@ afwi/
 | APK（リリース） | GitHub Actions で `assembleRelease`。署名鍵は GitHub Secrets に置き、成果物として APK をダウンロード |
 
 - Capacitor は v8（2025-12-08 リリース、Active）を採用予定。v7 は 2026-06-08 に保守終了、2026-12-08 にサポート終了（出典: Capacitor Support Policy、一次情報）。
-- v8 の Android 最低要件は**未確認**。着手時に公式ドキュメントで確認して `minSdkVersion` を確定する。
+- v8.5.3 のテンプレートは minSdkVersion 24、compile/targetSdkVersion 36。これに合わせて確定した（P3）。
 
 ## 6. テスト方針
 
@@ -169,7 +169,7 @@ afwi/
 | P0 設計 | 要件定義、ゲーム仕様、技術設計（本書） | 未決事項 D-01〜D-08 の決定 | アーティファクト（設計書） |
 | P1 試作 | 射程地図、マップ外ボックス、S0、ホットシート、d4 の制空と打撃 | ブラウザで3ターン遊べる（実装済み、docs/04-prototype-p1.md） | アーティファクト（遊べる試作） |
 | P2 ルール完成 | 全ルール、S1・S2、CPU（易・中） | CPU と最後まで対戦できる（実装済み、docs/05-prototype-p2.md） | アーティファクト |
-| P3 Android 化 | Capacitor 導入、保存のネイティブ化、CI で APK 生成 | 実機で起動しセーブ／ロードできる | APK |
+| P3 Android 化 | Capacitor 導入、保存のネイティブ化、CI で APK 生成 | 実機で起動しセーブ／ロードできる（APK 作成済み・実機確認待ち、docs/06-android.md） | APK |
 | P4 調整 | 自動対戦によるバランス調整、CPU（難）、演出 | NFR を満たす | APK（ベータ） |
 | P5 v1.0 | 不具合修正、ルールブック整備 | 受入れ確認 | APK（正式版） |
 

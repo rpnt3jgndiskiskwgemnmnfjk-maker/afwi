@@ -14,6 +14,7 @@
 | [src/data/map.json](src/data/map.json) | 作戦地図の定義（17エリア、マップ外ボックス5つ、射程帯の表）。`npm run mapgen` で生成 |
 | [docs/04-prototype-p1.md](docs/04-prototype-p1.md) | P1 試作の実装範囲、簡略化した点、開発の手順 |
 | [docs/05-prototype-p2.md](docs/05-prototype-p2.md) | P2（全ルール、S1・S2、CPU）の実装範囲と、CPU 同士の対戦による確認結果 |
+| [docs/06-android.md](docs/06-android.md) | Android 版（P3）：APK のビルド、署名鍵、CI、インストール、確認結果 |
 
 ## 開発
 
@@ -22,12 +23,13 @@ npm install
 npm run dev              # 開発サーバー
 npm test                 # ルールエンジンの単体テスト
 npm run build:artifact   # 単一 HTML（dist/index.html）とアーティファクト用 HTML（dist/artifact.html）
+npm run apk:debug        # Android のデバッグ版 APK（Android SDK が必要。docs/06-android.md）
 ```
 
 ## 進め方
 
 1. P0 設計（完了）: 設計書をアーティファクトで確認し、未決事項を決定
 2. P1 試作（完了）: ブラウザで遊べる試作をアーティファクトで確認
-3. P2 ルール完成と CPU（実装済み・確認中）
-4. P3 Capacitor で Android 化し、CI で APK を生成
+3. P2 ルール完成と CPU（完了）
+4. P3 Capacitor で Android 化し、CI で APK を生成（実装済み・実機確認待ち）
 5. P4 バランス調整 → P5 v1.0

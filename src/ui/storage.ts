@@ -1,18 +1,17 @@
-// 自動保存。ブラウザ（アーティファクト）では localStorage、P3 で Capacitor Preferences に差し替える。
-// 保存できない環境（プライベートウィンドウなど）でもゲームは続けられるよう、失敗は無視する。
+// 自動保存。ブラウザ（アーティファクト）では localStorage、Android 版では Capacitor Preferences
+// （端末の SharedPreferences）に保存する。保存できない環境でもゲームは続けられるよう、失敗は無視する。
 
 import type { Session } from './App';
 
 const KEY = 'aac.session.v2';
+const native = import.meta.env.MODE === 'android';
 
-export function saveSession(s: Session) {
-  try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* 保存できなくても続行 */ }
-}
+// プラグインは Promise の戻り値にしない（then の有無を調べられた時点で例外になる）。モジュールごと受け取る
+const prefsModule = () => import('@capacitor/preferences');
 
-export function loadSession(): Session | null {
+function parse(raw: string | null): Session | null {
+  if (!raw) return null;
   try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return null;
     const s = JSON.parse(raw) as Session;
     return s?.version === 2 && s.game?.schemaVersion === 2 ? s : null;
   } catch {
@@ -20,6 +19,26 @@ export function loadSession(): Session | null {
   }
 }
 
-export function clearSession() {
-  try { localStorage.removeItem(KEY); } catch { /* 無視 */ }
+export async function saveSession(s: Session) {
+  const value = JSON.stringify(s);
+  try {
+    if (native) await (await prefsModule()).Preferences.set({ key: KEY, value });
+    else localStorage.setItem(KEY, value);
+  } catch { /* 保存できなくても続行 */ }
+}
+
+export async function loadSession(): Promise<Session | null> {
+  try {
+    if (native) return parse((await (await prefsModule()).Preferences.get({ key: KEY })).value);
+    return parse(localStorage.getItem(KEY));
+  } catch {
+    return null;
+  }
+}
+
+export async function clearSession() {
+  try {
+    if (native) await (await prefsModule()).Preferences.remove({ key: KEY });
+    else localStorage.removeItem(KEY);
+  } catch { /* 無視 */ }
 }

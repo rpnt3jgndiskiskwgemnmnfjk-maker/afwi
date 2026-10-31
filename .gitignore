@@ -1,3 +1,11 @@
 node_modules/
 dist/
+dist-android/
 *.log
+# Android のビルド成果物と署名鍵
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties
+*.jks
+*.keystore

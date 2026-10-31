@@ -8,7 +8,7 @@ import {
 import { MapView, type MapLine } from './MapView';
 import { PlanPanel } from './PlanPanel';
 import { ResultPanel, Summary } from './ResultPanel';
-import { clearSession, loadSession, saveSession } from './storage';
+import { clearSession, saveSession } from './storage';
 
 /** cpu：CPU と対戦、secret：2 人で交代（目隠しあり）、open：1 人で両軍（霧なし） */
 export type Mode = 'cpu' | 'secret' | 'open';
@@ -52,9 +52,9 @@ function firstScreen(mode: Mode, human: Side): Screen {
   return mode === 'secret' ? { kind: 'handover', side: 'blue' } : { kind: 'plan', side: 'blue' };
 }
 
-export function App({ initial }: { initial: Session | null }) {
+export function App({ initial, saved: savedAtBoot }: { initial: Session | null; saved: Session | null }) {
   const [session, setSession] = useState<Session | null>(initial);
-  const [saved, setSaved] = useState<Session | null>(() => (initial ? null : loadSession()));
+  const [saved, setSaved] = useState<Session | null>(savedAtBoot);
   const [selLoc, setSelLoc] = useState<string | null>('OKI');
   const [selUnit, setSelUnit] = useState<string | null>(null);
   const [mission, setMission] = useState<Mission | null>(null);
@@ -65,6 +65,19 @@ export function App({ initial }: { initial: Session | null }) {
     current = session;
     if (session) saveSession(session);
   }, [session]);
+
+  // Android の戻るボタン：選択を外す → タイトルへ戻る（対局は保存済み）→ タイトルではアプリを閉じる
+  useEffect(() => {
+    const onBack = (e: Event) => {
+      if (!session || session.screen.kind === 'title') return;
+      e.preventDefault();
+      if (selUnit || mission) { setSelUnit(null); setMission(null); return; }
+      setSaved(session);
+      setSession(null);
+    };
+    window.addEventListener('aac-back', onBack);
+    return () => window.removeEventListener('aac-back', onBack);
+  }, [session, selUnit, mission]);
 
   const resetSelection = (side?: Side) => {
     setSelLoc(side === 'red' ? 'ECC' : 'OKI');
