@@ -1,4 +1,4 @@
-# 作戦地図データ（docs/data/map.json）を生成する。射程帯は大圏距離を 500km ごとに切り上げた値。
+# 作戦地図データ（src/data/map.json）を生成する。射程帯は大圏距離を 500km ごとに切り上げた値。
 # 使い方: python3 tools/mapgen.py
 import json, math
 BAND_KM = 500
@@ -45,7 +45,7 @@ out={"version":2,
  "offMapBoxes":[dict(id=b[0],name=b[1],side=b[2],role=b[3],lon=b[4],lat=b[5]) for b in boxes],
  "bands":{i:{j:band(km(pts[i],pts[j])) for j in ids} for i in ids}}
 import os
-DST=os.path.join(os.path.dirname(os.path.abspath(__file__)),"..","docs","data","map.json")
+DST=os.path.join(os.path.dirname(os.path.abspath(__file__)),"..","src","data","map.json")
 json.dump(out,open(DST,"w"),ensure_ascii=False,indent=1)
 for i in ["KYU","OKI","SAK","OGA","ECC","SCC","B-REAR","B-STO","R-STO","R-REAR"]:
     print(i, {j:out["bands"][i][j] for j in ["ECS","TWS","TWE","BAS","PHS","SCN","SCS","OKI","KYU","ECC","SCC","B-REAR"]})
