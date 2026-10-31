@@ -135,7 +135,7 @@ export const S2: Scenario = {
   keyAreas: ['ECS', 'TWS', 'TWE', 'BAS'],
   sides: {
     blue: { will: 10, logistics: 16, salvos: 6 },
-    red: { will: 9, logistics: 10, salvos: 4 },
+    red: { will: 8, logistics: 10, salvos: 4 },
   },
   units: [
     ...S1.units,

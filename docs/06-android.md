@@ -12,14 +12,14 @@
 |---|---|
 | アプリ ID | `app.archipelago.aircommand`（一度配布したら変更しない。変えると別アプリ扱いになり、更新できない） |
 | 表示名 | 列島航空作戦 |
-| バージョン | 0.3.0（versionCode 3） |
+| バージョン | 0.4.0（versionCode 4）。P3 の初版は 0.3.0 |
 | 対応 OS | Android 7.0（API 24）以上。対象 API 36。Capacitor 8.5.3 のテンプレートの値 |
 | 権限 | なし（INTERNET も要求しない。要件 NFR-03） |
 | 保存 | Capacitor Preferences（端末の SharedPreferences）。アプリを閉じても対局を再開できる |
 | フォント | 等幅の IBM Plex Mono を同梱。和文は端末の標準フォント（Noto Sans CJK）を使う。APK を小さく保つため |
 | 戻るボタン | 選択を外す → タイトルへ戻る（対局は保存済み）→ タイトルではアプリを閉じる |
 | 画面の向き | 固定しない（横持ちが主、縦持ちでも表示が崩れない） |
-| APK の大きさ | 約 4.4MB（要件 NFR-05 の 20MB 以下） |
+| APK の大きさ | 約 4.5MB（要件 NFR-05 の 20MB 以下） |
 
 Web 版（アーティファクト）と Android 版は同じソースから作ります。違いは `vite build --mode android` のときだけ有効になる部分（フォントの同梱、保存先、戻るボタン）です。
 
@@ -102,4 +102,4 @@ AAC_KEYSTORE_PATH=/path/to/aac-release.jks AAC_KEYSTORE_PASSWORD=... AAC_KEY_ALI
 
 - 開発時だけ使う Capacitor CLI の依存（glob、minimatch、uuid）に中程度の脆弱性が報告されています。修正には CLI を 4 系に戻す必要があり、APK には含まれないため、現状のままとします。
 - npm 10.9 の依存解決の不具合を避けるため、`.npmrc` で `legacy-peer-deps=true` にしています。
-- ピンチによる地図の拡大は未実装です（「拡大」ボタンで代用）。P4 で検討します。
+- （P4 で対応済み）地図は 2 本指のピンチで拡大・縮小、1 本指のドラッグで移動できます。

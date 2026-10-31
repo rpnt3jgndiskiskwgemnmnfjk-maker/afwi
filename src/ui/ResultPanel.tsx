@@ -17,6 +17,8 @@ export function ResultPanel({ game, report, onNext }: { game: GameState; report:
   const tally = ev.filter((e) => ['move', 'posture', 'repair', 'logistics', 'will', 'escalation', 'vp'].includes(e.kind));
   const nothing = !standoff.length && !air.length && !sam.length && !strike.length && !sead.length;
 
+  let order = 0;
+  const seq = () => `--i:${order++}`;
   return (
     <>
       <div class="card">
@@ -25,19 +27,19 @@ export function ResultPanel({ game, report, onNext }: { game: GameState; report:
       </div>
       <div class="events">
         {cards.map((e) => (
-          <div class={`ev ${e.side}`}>
+          <div class={`ev ${e.side}`} style={seq()}>
             <h4>国力カード：{sideJa(e.side)}「{CARDS[e.card].name}」{e.target ? `（${LOC[e.target].name}）` : ''}</h4>
             <p class="effects">{CARDS[e.card].domain}・{e.effects.length ? e.effects.join('、') : CARDS[e.card].text}</p>
           </div>
         ))}
         {cancelled.length > 0 && (
-          <div class="ev both">
+          <div class="ev both" style={seq()}>
             <h4>出撃の取り消し</h4>
             {cancelled.map((e) => <p class="effects">{nameOf(game, e.unitId)}：{e.reason}</p>)}
           </div>
         )}
         {standoff.map((e) => (
-          <div class={`ev ${e.side}`}>
+          <div class={`ev ${e.side}`} style={seq()}>
             <h4>スタンドオフ打撃：{sideJa(e.side)} → {LOC[e.target].name}</h4>
             <p class="effects">{nameOf(game, e.unitId)} が {e.launched} 発を発射</p>
             {e.intercept.map((r) => <RollLine roll={r} side={e.side === 'blue' ? 'red' : 'blue'} label={`迎撃 ${nameOf(game, r.unitId)}`} />)}
@@ -47,7 +49,7 @@ export function ResultPanel({ game, report, onNext }: { game: GameState; report:
           </div>
         ))}
         {air.map((e) => (
-          <div class="ev both">
+          <div class="ev both" style={seq()}>
             <h4>航空戦：{LOC[e.area].name}</h4>
             {(['blue', 'red'] as Side[]).map((s) => e.rolls[s].map((r) => <RollLine roll={r} side={s} label={nameOf(game, r.unitId)} />))}
             <Effects list={e.effects} />
@@ -55,27 +57,27 @@ export function ResultPanel({ game, report, onNext }: { game: GameState; report:
           </div>
         ))}
         {sead.map((e) => (
-          <div class={`ev ${e.side}`}>
+          <div class={`ev ${e.side}`} style={seq()}>
             <h4>防空制圧：{sideJa(e.side)} → {LOC[e.target].name}</h4>
             {e.rolls.map((r) => <RollLine roll={r} side={e.side} label={nameOf(game, r.unitId)} />)}
             <Effects list={e.effects} />
           </div>
         ))}
         {sam.map((e) => (
-          <div class={`ev ${e.side}`}>
+          <div class={`ev ${e.side}`} style={seq()}>
             <h4>地上配備防空：{LOC[e.area].name}（{sideJa(e.side)}）</h4>
             {e.rolls.map((r) => <RollLine roll={r} side={e.side} label={nameOf(game, r.unitId)} />)}
             <Effects list={e.effects} />
           </div>
         ))}
         {strike.map((e) => (
-          <div class={`ev ${e.side}`}>
+          <div class={`ev ${e.side}`} style={seq()}>
             <h4>打撃：{sideJa(e.side)} → {LOC[e.target].name}</h4>
             {e.rolls.map((r) => <RollLine roll={r} side={e.side} label={nameOf(game, r.unitId)} />)}
             <Effects list={e.effects} />
           </div>
         ))}
-        <div class="ev">
+        <div class="ev" style={seq()}>
           <h4>回復と集計</h4>
           {tally.map((e) => <p class="effects">{tallyText(game, e)}</p>)}
         </div>

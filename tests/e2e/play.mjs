@@ -22,6 +22,22 @@ await shot(page, '0-title');
 await page.getByRole('button', { name: '1 人で両軍を操作' }).click();
 await page.getByRole('button', { name: 'この設定で始める' }).click();
 
+// 地図の拡大と移動：ボタンで拡大し、ドラッグで動かしても地点が選ばれないこと
+const svg = page.locator('.mapwrap svg');
+const vb0 = await svg.getAttribute('viewBox');
+await page.getByRole('button', { name: '拡大', exact: true }).click();
+const vb1 = await svg.getAttribute('viewBox');
+const box = await svg.boundingBox();
+await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+await page.mouse.down();
+await page.mouse.move(box.x + box.width / 2 - 120, box.y + box.height / 2 - 40, { steps: 8 });
+await page.mouse.up();
+const vb2 = await svg.getAttribute('viewBox');
+const selected = await page.locator('.panel h3').nth(1).innerText();
+if (vb0 === vb1 || vb1 === vb2 || selected !== '沖縄') throw new Error(`拡大・移動の確認に失敗：${vb0} → ${vb1} → ${vb2}、選択 ${selected}`);
+await page.getByRole('button', { name: '全域' }).click();
+console.log('地図の拡大・移動 OK');
+
 /** 地点 → 部隊 → 任務 → 目標の順に選ぶ */
 async function order(loc, unitLabel, mission, target) {
   await page.getByRole('button', { name: loc, exact: true }).first().click();
@@ -67,7 +83,7 @@ await shot(page, '6-cpu-plan');
 for (let turn = 1; turn <= 8; turn++) {
   await order('沖縄', '青 FTR-3', '制空', '東シナ海');
   await page.getByRole('button', { name: '計画を確定する' }).click();
-  if (turn === 2) await shot(page, '7-cpu-result');
+  if (turn === 2) { await page.waitForTimeout(1500); await shot(page, '7-cpu-result'); }
   const next = page.getByRole('button', { name: /へ進む|最終結果/ });
   const label = await next.innerText();
   await next.click();
@@ -80,7 +96,7 @@ const phone = await browser.newPage({ viewport: { width: 844, height: 390 } });
 await phone.goto(url);
 await phone.getByRole('button', { name: 'この設定で始める' }).click();
 await phone.screenshot({ path: new URL('4-phone.png', outDir).pathname });
-await phone.getByRole('button', { name: '拡大' }).click();
+await phone.getByRole('button', { name: '拡大', exact: true }).click();
 await phone.screenshot({ path: new URL('5-phone-zoom.png', outDir).pathname });
 
 await browser.close();

@@ -1,7 +1,7 @@
 {
   "name": "archipelago-air-command",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.4.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,7 +12,8 @@
     "mapgen": "python3 tools/mapgen.py",
     "build:android": "vite build --mode android && cap sync android",
     "apk:debug": "npm run build:android && cd android && ./gradlew assembleDebug",
-    "apk:release": "npm run build:android && cd android && ./gradlew assembleRelease"
+    "apk:release": "npm run build:android && cd android && ./gradlew assembleRelease",
+    "balance": "AAC_BALANCE=1 vitest run tests/balance.test.ts --silent=false --reporter=verbose"
   },
   "dependencies": {
     "@capacitor/android": "8.5.3",

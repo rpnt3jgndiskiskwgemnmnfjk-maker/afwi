@@ -38,6 +38,8 @@ export interface Setup {
   cpuLevel: CpuLevel;
 }
 
+const LEVEL_JA: Record<CpuLevel, string> = { easy: '易しい', normal: '標準', hard: '難しい' };
+
 let current: Session | null = null;
 /** 表示中のアーティファクトが更新されたときに状態を引き継ぐための参照 */
 export const currentSession = () => current;
@@ -59,7 +61,6 @@ export function App({ initial, saved: savedAtBoot }: { initial: Session | null; 
   const [selUnit, setSelUnit] = useState<string | null>(null);
   const [mission, setMission] = useState<Mission | null>(null);
   const [aim, setAim] = useState<StrikeAim>('runway');
-  const [zoom, setZoom] = useState(false);
 
   useEffect(() => {
     current = session;
@@ -132,11 +133,13 @@ export function App({ initial, saved: savedAtBoot }: { initial: Session | null; 
       update({ plans: { blue: emptyPlan(), red: emptyPlan() }, screen: sc });
     };
     const viewer = mode === 'cpu' ? session.human : mode === 'open' ? 'all' : 'public';
+    const flashes = [...new Set(report.events.flatMap((e) =>
+      e.kind === 'air' || e.kind === 'sam' ? [e.area] : e.kind === 'strike' || e.kind === 'standoff' || e.kind === 'sead' ? [e.target] : []))];
     return (
       <>
         <StatusBar game={game} label="解決" />
         <div class="board">
-          <div class="mapwrap"><MapView game={game} selected={null} ring={null} targets={[]} lines={lines} viewer={viewer} onPick={() => {}} /></div>
+          <div class="mapwrap"><MapView game={game} selected={null} ring={null} targets={[]} lines={lines} flashes={flashes} viewer={viewer} zoomable onPick={() => {}} /></div>
           <div class="panel gutter"><ResultPanel game={game} report={report} onNext={next} /></div>
         </div>
       </>
@@ -196,11 +199,10 @@ export function App({ initial, saved: savedAtBoot }: { initial: Session | null; 
 
   return (
     <>
-      <StatusBar game={game} who={side} label={mode === 'cpu' ? `計画（CPU：${session.cpuLevel === 'easy' ? '易しい' : '標準'}）` : '計画'} />
+      <StatusBar game={game} who={side} label={mode === 'cpu' ? `計画（CPU：${LEVEL_JA[session.cpuLevel]}）` : '計画'} />
       <div class="board">
         <div class="mapwrap">
-          <button class="btn small zoom" aria-pressed={zoom} onClick={() => setZoom(!zoom)}>{zoom ? '全域を表示' : '拡大'}</button>
-          <MapView game={game} selected={selLoc} ring={showRing ? { center: ringCenter!, radius: ringRadius } : null} targets={targets} lines={lines} zoom={zoom} viewer={mode === 'open' ? 'all' : side} onPick={pick} />
+          <MapView game={game} selected={selLoc} ring={showRing ? { center: ringCenter!, radius: ringRadius } : null} targets={targets} lines={lines} zoomable viewer={mode === 'open' ? 'all' : side} onPick={pick} />
         </div>
         <div class="panel gutter">
           <PlanPanel
@@ -244,7 +246,7 @@ function Title({ saved, onStart, onContinue }: { saved: Session | null; onStart:
   return (
     <div class="screen gutter">
       <div class="sheet">
-        <span class="label">試作 P2</span>
+        <span class="label">試作 P4 · 0.4.0</span>
         <h1>Archipelago Air Command</h1>
         <p class="lede">列島航空作戦。西太平洋の航空作戦を、d4 ダイスと射程を示す地図で戦うオリジナルの作戦級ウォーゲームです。</p>
         {saved && saved.screen.kind !== 'end' && (
@@ -271,7 +273,7 @@ function Title({ saved, onStart, onContinue }: { saved: Session | null; onStart:
             <button class="btn small" aria-pressed={setup.mode === 'open'} onClick={() => set({ mode: 'open' })}>1 人で両軍を操作</button>
           </div>
           <p class="muted" style="font-size:12.5px">
-            {setup.mode === 'cpu' && '相手の計画は CPU が立てます。戦場の霧があり、探知していない敵部隊は「?」で表示されます。'}
+            {setup.mode === 'cpu' && '相手の計画は CPU が立てます。CPU もあなたと同じく、探知した情報だけで判断します。探知していない敵部隊は「?」で表示されます。'}
             {setup.mode === 'secret' && '1 台の端末を交代で使います。交代のたびに目隠し画面を出し、それぞれ自分が探知した情報だけを表示します。'}
             {setup.mode === 'open' && 'ルールの確認用です。戦場の霧を外し、両軍の部隊をすべて表示します。'}
           </p>
@@ -286,6 +288,7 @@ function Title({ saved, onStart, onContinue }: { saved: Session | null; onStart:
                 <span class="muted">CPU の強さ</span>
                 <button class="btn small" aria-pressed={setup.cpuLevel === 'easy'} onClick={() => set({ cpuLevel: 'easy' })}>易しい</button>
                 <button class="btn small" aria-pressed={setup.cpuLevel === 'normal'} onClick={() => set({ cpuLevel: 'normal' })}>標準</button>
+                <button class="btn small" aria-pressed={setup.cpuLevel === 'hard'} onClick={() => set({ cpuLevel: 'hard' })}>難しい</button>
               </div>
             </>
           )}

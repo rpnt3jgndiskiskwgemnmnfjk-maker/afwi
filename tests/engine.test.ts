@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { S0, S1, S2 } from '../src/data/scenarios';
 import { UNIT_TYPES } from '../src/data/units';
 import {
-  band, createGame, emptyPlan, hitDistribution, missionsFor, planCost, planForCpu, resolveTurn, validatePlan, validTargets,
+  band, beliefState, createGame, emptyPlan, hitDistribution, missionsFor, planCost, planForCpu, resolveTurn, validatePlan, validTargets,
   type GameState, type Plan, type Side,
 } from '../src/engine';
 import { rollD4, seedRng } from '../src/engine/rng';
@@ -248,5 +248,20 @@ describe('P2 のルール', () => {
       if (g.outcome.kind === 'victory') g.outcome.winner === normal ? normalWins++ : easyWins++;
     }
     expect(normalWins).toBeGreaterThan(easyWins);
+  }, 60_000);
+  it('CPU は探知していない敵部隊の中身を使わない（同じ数のまま種類を入れ替えても計画が変わらない）', () => {
+    for (const level of ['easy', 'normal', 'hard'] as const) {
+      const g = createGame(S1, 21);
+      const hidden = Object.values(g.units).filter((u) => u.side === 'blue' && !g.detected.red.includes(u.location));
+      expect(hidden.length).toBeGreaterThan(0);
+      const swapped = structuredClone(g);
+      for (const u of hidden) {
+        const w = swapped.units[u.id];
+        if (w.type !== 'LRM' && w.type !== 'SAM') { w.type = w.type === 'FTR' ? 'BMR' : 'FTR'; w.steps = UNIT_TYPES[w.type].steps; }
+      }
+      expect(planForCpu(swapped, 'red', level)).toEqual(planForCpu(g, 'red', level));
+      const view = beliefState(g, 'red');
+      for (const u of hidden) expect(view.units[u.id]).toBeUndefined();
+    }
   }, 60_000);
 });

@@ -1,5 +1,5 @@
 // CPU（評価関数型）。自軍から見える情報（探知済みの地点と公開情報）だけで計画を立てる。
-// 易：判断に揺らぎを入れ、防空制圧・給油・分散を使わない。標準：下の優先順で兵站の許す限り任務を積む。
+// 易：判断に揺らぎを入れ、防空制圧・給油・分散を使わない。標準・難しい：候補の計画を 1 日先まで試しに解決して選ぶ。
 
 import { CARDS } from '../data/cards';
 import { UNIT_TYPES } from '../data/units';
@@ -13,39 +13,74 @@ import { aliveUnits, emptyPlan, ownerOf, unitsAt } from './state';
 import type { CardId, GameState, Mission, Order, Plan, Side, Unit } from './types';
 import { enemyOf } from './types';
 
-export type CpuLevel = 'easy' | 'normal';
+export type CpuLevel = 'easy' | 'normal' | 'hard';
 
 /** 標準 CPU の動きの切り替え（バランス調整と検証用） */
 export const AI_OPTIONS = { lookahead: true, reserve: true, hubCap: true, disperse: true, strikes: true, cards: true, moves: true };
 
-const CANDIDATES = 6;
-const SIMULATIONS = 3;
+/** 強さごとの先読みの量。相手の想定：normal＝標準のルール、jitter＝揺らぎを入れた標準のルール */
+const SEARCH: Record<Exclude<CpuLevel, 'easy'>, { candidates: number; simulations: number; enemyModels: ('normal' | 'jitter')[] }> = {
+  normal: { candidates: 6, simulations: 3, enemyModels: ['normal'] },
+  hard: { candidates: 12, simulations: 5, enemyModels: ['normal'] },
+};
 
 /**
- * CPU の計画。易は手作業のルールだけで決める。
- * 標準は候補の計画を何通りか作り、相手の出方（標準のルールによる計画）を想定して数回ずつ試しに解決し、
- * 評価関数で最も良いものを選ぶ（1 手先読み）。試しの解決は真の状態を使う（P4 で戦場の霧を考えた推定に置き換える）。
+ * その陣営から見た推定盤面。探知していない地点の敵部隊を取り除き、画面に出る数の目安（少数／多数）から
+ * 仮の部隊を置く（スタンドオフ・ボックスは長射程ミサイル、それ以外は制空戦闘機）。敵の手札も見えないものとして空にする。
+ * CPU はこの盤面だけを見て計画を立てるので、プレイヤーより多くの情報は使わない。
+ */
+export function beliefState(st: GameState, side: Side): GameState {
+  const b: GameState = structuredClone(st);
+  b.history = [];
+  const enemy = enemyOf(side);
+  const counts: Record<string, number> = {};
+  for (const u of Object.values(b.units)) {
+    if (u.side !== enemy || u.steps <= 0 || st.detected[side].includes(u.location)) continue;
+    counts[u.location] = (counts[u.location] ?? 0) + 1;
+    delete b.units[u.id];
+  }
+  for (const [loc, n] of Object.entries(counts)) {
+    const guess = n <= 2 ? 2 : 3;
+    const type = LOC[loc].role === 'standoff' ? 'LRM' : 'FTR';
+    for (let i = 0; i < guess; i++) {
+      const id = `${enemy === 'blue' ? 'B' : 'R'}-推定-${loc}-${i + 1}`;
+      b.units[id] = { id, side: enemy, type, steps: UNIT_TYPES[type].steps, location: loc, posture: 'parked' };
+    }
+  }
+  b.sides[enemy].hand = [];
+  b.sides[enemy].deck = [];
+  return b;
+}
+
+/**
+ * CPU の計画。どの強さも推定盤面（beliefState）だけを見る。
+ * 易は手作業のルールだけで決める。標準・難しいは候補の計画を何通りか作り、相手の出方を想定して
+ * 推定盤面の上で数回ずつ試しに解決し、評価関数で最も良いものを選ぶ（1 手先読み）。
  */
 export function planForCpu(st: GameState, side: Side, level: CpuLevel): Plan {
-  if (level === 'easy') return heuristicPlan(st, side, true, false, 0);
-  if (!AI_OPTIONS.lookahead) return heuristicPlan(st, side, false, false, 0);
+  const view = beliefState(st, side);
+  if (level === 'easy') return heuristicPlan(view, side, true, false, 0);
+  if (!AI_OPTIONS.lookahead) return heuristicPlan(view, side, false, false, 0);
+  const cfg = SEARCH[level];
   const enemy = enemyOf(side);
-  const enemyPlan = heuristicPlan(st, enemy, false, false, 0);
+  const enemyPlans = cfg.enemyModels.map((m, i) => heuristicPlan(view, enemy, false, m === 'jitter', 100 + i));
   let best: { plan: Plan; score: number } | null = null;
-  for (let c = 0; c < CANDIDATES; c++) {
+  for (let c = 0; c < cfg.candidates; c++) {
     // 0：標準のルール、1：易のルール（温存寄り）、2 以降：標準に揺らぎを入れたもの
-    const plan = c === 1 ? heuristicPlan(st, side, true, false, 0) : heuristicPlan(st, side, false, c > 1, c);
+    const plan = c === 1 ? heuristicPlan(view, side, true, false, 0) : heuristicPlan(view, side, false, c > 1, c);
+    if (validatePlan(st, side, plan).length) continue;
     let total = 0;
-    for (let k = 0; k < SIMULATIONS; k++) {
-      const sim = structuredClone(st);
-      sim.history = [];
-      sim.rng = seedRng((st.seed ^ Math.imul(st.turn * 97 + k, 0x85ebca6b)) >>> 0);
-      const plans = side === 'blue' ? { blue: plan, red: enemyPlan } : { blue: enemyPlan, red: plan };
-      total += evaluate(resolveTurn(sim, plans).state, side, st);
+    for (const enemyPlan of enemyPlans) {
+      for (let k = 0; k < cfg.simulations; k++) {
+        const sim = structuredClone(view);
+        sim.rng = seedRng((st.seed ^ Math.imul(st.turn * 97 + k, 0x85ebca6b)) >>> 0);
+        const plans = side === 'blue' ? { blue: plan, red: enemyPlan } : { blue: enemyPlan, red: plan };
+        total += evaluate(resolveTurn(sim, plans).state, side, st);
+      }
     }
     if (!best || total > best.score) best = { plan, score: total };
   }
-  return best!.plan;
+  return best?.plan ?? heuristicPlan(view, side, false, false, 0);
 }
 
 /** 1 日の解決後の局面の評価（自軍から見て大きいほど良い） */
@@ -88,7 +123,7 @@ function heuristicPlan(st: GameState, side: Side, easy: boolean, jitter: boolean
   // 修復は先に予算を確保する（ハブを優先）
   const damaged = LOCATIONS.filter((l) => l.kind === 'base' && ownerOf(st, l.id) === side && st.bases[l.id].runway < 3)
     .sort((a, b) => Number(isHub(b.id)) - Number(isHub(a.id)) || st.bases[a.id].runway - st.bases[b.id].runway);
-  for (const b of damaged.slice(0, easy ? 1 : 2)) {
+  for (const b of damaged.slice(0, easy ? 0 : 2)) {
     if (st.sides[side].logistics >= REPAIR_COST + 3) {
       p.repairs.push(b.id);
       if (validatePlan(st, side, p).length) p.repairs.pop();
@@ -105,7 +140,11 @@ function heuristicPlan(st: GameState, side: Side, easy: boolean, jitter: boolean
     .filter((u) => missionsFor(st, u).includes('CAP') && u.type !== 'BMR')
     .sort((a, b) => fighterRank(a) - fighterRank(b));
   const reachable = (k: string) => fighters().filter((u) => can(u, 'CAP', k)).length;
-  const keys = easy || jitter
+  // 易：要域かどうかを考えずに争奪エリアを選ぶ（初心者向けの相手として、狙いを絞らない）
+  const contested = LOCATIONS.filter((l) => l.kind === 'contested').map((l) => l.id);
+  const keys = easy
+    ? contested.sort(() => rand() - 0.5).slice(0, st.keyAreas.length)
+    : jitter
     ? [...st.keyAreas].sort(() => rand() - 0.5)
     : [...st.keyAreas].sort((a, b) => (reachable(b) - enemyCommit(st, side, b)) - (reachable(a) - enemyCommit(st, side, a)));
   const assignCap = (k: string, want: number) => {
